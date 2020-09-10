@@ -19,16 +19,41 @@ if(!existsSync(inDir)){
 
 // Check exiftool
 {
-    let response = await exec(
-        "exiftool",
-        { output: OutputMode.Capture },
-    );
+    let response: IExecResponse;
+    try {
+        response = await exec(
+            "exiftool",
+            { output: OutputMode.Capture },
+        );
+    } catch (error) {
+        response = {status:{code:99,success:false},output:""};
+    }
     if(
         response.status.code != 0 ||
         !response.status.success ||
         response.output != "Syntax:  exiftool [OPTIONS] FILE\n\nConsult the exiftool documentation for a full list of options."
         ){
             console.log("Failed to verify exiftool is installed!");
+            Deno.exit(2);
+        }
+}
+// Check jpegtran
+{let response: IExecResponse;
+    try {
+        response = await exec(
+            "jpegtran -version",
+            { output: OutputMode.Capture },
+        );
+    } catch (error) {
+        response = { status: { code: 99, success: false }, output: "" };
+    }
+    if(
+        response.status.code != 0 ||
+        !response.status.success ||
+        response.output != ""
+        ){
+            console.log(response);
+            console.log("Failed to verify jpegtran is installed!");
             Deno.exit(2);
         }
 }
@@ -42,26 +67,37 @@ const rigDir: string = rootDir + "/rig";
 //ensureDirSync(rootDir);
 //ensureDirSync(rigDir);
 for (let index = 1; index <= 6; index++) {
-    ensureDirSync(`${rigDir}/${index}`);
+    ensureDirSync(`${rigDir}/${index-1}`);
 }
 
-let copyQueue: Promise<void>[] = [];
+let voidQueue: Promise<void>[] = [];
+let commandQueue: Promise<IExecResponse>[] = [];
+let counter=0;
 
 for await (const dirEntry of Deno.readDir(inDir)) {
     for await (const fileEntry of Deno.readDir(inDir + dirEntry.name)) {
         if(originExp.test(fileEntry.name)){
-            let num = originExp.exec(fileEntry.name)?.[1];
+            let num = parseInt(originExp.exec(fileEntry.name)?.[1] || "1") - 1;
             let filename = `${inDir}/${dirEntry.name}/${fileEntry.name}`
-            copyQueue.push(copy(filename, `${rigDir}/${num}/${dirEntry.name}.jpg`));
+                    const command = `jpegtran \
+-rotate 270 \
+-copy all \
+-outfile ${`${rigDir}/${num}/${`${counter}`.padStart(4, "0")}.jpg`} \
+${filename}`;
+        //console.log(command);
+        commandQueue.push(exec(
+            command,
+            //{ output: OutputMode.None },
+        ));
+            //voidQueue.push(copy(filename, `${rigDir}/${num}/${dirEntry.name}.jpg`));
         }
     }
+    counter++;
 }
 
-await Promise.all(copyQueue);
+await Promise.all(commandQueue);
 
-let exifUpdates: Promise<IExecResponse>[] = [];
-
-console.log(`${copyQueue.length} items copied...`)
+console.log(`${commandQueue.length} items copied...`)
 // await delay(1000);
 
 // for (let index = 1; index <= 6; index++) {
@@ -83,22 +119,25 @@ console.log(`${copyQueue.length} items copied...`)
 
 // exifUpdates = [];
 
-for (let index = 1; index <= 6; index++) {
-    for await (const fileEntry of Deno.readDir(`${rigDir}/${index}`)) {
+for (let id = 0; id < counter; id++) {
+    for (let rig = 0; rig <= 5; rig++) {
+        let fauxDate = `1997:09:02 ${Math.floor((id/60/60))%12}:${Math.floor(id/60)%60}:${id%60}`
         const command = `exiftool \
--ExifIFD:SerialNumber="Pro2_Subcamera_${index}" \
+-ExifIFD:SerialNumber="Pro2_Subcamera_${rig}" \
+-ExifIFD:DateTimeOriginal="${fauxDate}" \
+-ExifIFD:FocalLengthIn35mmFormat="59.4034" \
 ${/*"-v3"*/ 0 || ""} \
-${rigDir}/${index}/${fileEntry.name}`;
+${rigDir}/${rig}/${`${id}`.padStart(4, "0")}.jpg`;
         console.log(command);
-        // await exec(
-        //     command,
-        //     //{ output: OutputMode.Capture },
-        // )
+        /*commandQueue.push(exec(
+            command,
+            { output: OutputMode.Capture },
+        ));*/
         // await delay(1000)
     }
 }
 
-// // await Promise.all(exifUpdates);
+await Promise.all(commandQueue);
 // // for await (const resp of exifUpdates) {
 // //     console.log(resp.status);
 // //     console.log(resp.output);
