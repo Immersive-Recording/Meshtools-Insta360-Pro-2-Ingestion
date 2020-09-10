@@ -15,3 +15,9 @@ To run do following:
 5. Click and drag the folders 0-5 within the rig folder to import the files.
 6. Verify the images were imported as a rig by checking to see if there is a chain icon on the thumbnails.
 7. You are done. Continue to Meshroom.
+
+## Insta360 Pro2 subcamera specs
+* The Focal Length in 35mm film is 59.4034mm
+* The sensor size is 7.9mm*4.75mm.
+
+(Source: Insta360 offical support)
