@@ -7,6 +7,26 @@ import { exec, OutputMode, IExecResponse } from "https://deno.land/x/exec/mod.ts
 const opts = parse(Deno.args);
 const inDir = opts?.["_"]?.[0] + "";
 
+function jpgtranCommandGenerator(infile: string, outfile: string):string {
+    let command = "jpegtran";
+    command += " -copy all";
+    command += " -rotate 270";
+    if(opts?.c) command += " -crop 3000x3100+0+450";
+    command += ` -outfile ${outfile}`;
+    command += ` ${infile}`;
+    return command;
+}
+
+function exiftoolCommandGenerator(file:string, rig:string, date:string): string {
+    let command = "exiftool";
+    command += `-ExifIFD:SerialNumber="${rig}"`
+    command += `-ExifIFD:DateTimeOriginal="${date}"`
+    command += `-ExifIFD:FocalLengthIn35mmFormat="59.4034"`
+    if(opts?.test)command += "-v3"
+    command += ` ${file}`;
+    return command;
+}
+
 if(!inDir){
     console.log("No Import Directory Given!");
     Deno.exit(1);
@@ -79,11 +99,7 @@ for await (const dirEntry of Deno.readDir(inDir)) {
         if(originExp.test(fileEntry.name)){
             let num = parseInt(originExp.exec(fileEntry.name)?.[1] || "1") - 1;
             let filename = `${inDir}/${dirEntry.name}/${fileEntry.name}`
-                    const command = `jpegtran \
--rotate 270 \
--copy all \
--outfile ${`${rigDir}/${num}/${`${counter}`.padStart(4, "0")}.jpg`} \
-${filename}`;
+                    const command = jpgtranCommandGenerator(filename, `${rigDir}/${num}/${`${counter}`.padStart(4, "0")}.jpg`);
         //console.log(command);
         commandQueue.push(exec(
             command,
@@ -98,36 +114,11 @@ ${filename}`;
 await Promise.all(commandQueue);
 
 console.log(`${commandQueue.length} items copied...`)
-// await delay(1000);
-
-// for (let index = 1; index <= 6; index++) {
-//   for await (const fileEntry of Deno.readDir(`${rigDir}/${index}`)) {
-//     const command = `exiftool \
-// -all= -tagsfromfile @ -all:all \
-// -unsafe -icc_profile \
-// ${rigDir}/${index}/${fileEntry.name}`;
-//     //console.log(command);
-//     exifUpdates.push(exec(
-//       command,
-//       { output: OutputMode.Capture },
-//     ));
-//     // delay(100)
-//   }
-// }
-
-// await Promise.all(exifUpdates);
-
-// exifUpdates = [];
 
 for (let id = 0; id < counter; id++) {
     for (let rig = 0; rig <= 5; rig++) {
         let fauxDate = `1997:09:02 ${Math.floor((id/60/60))%12}:${Math.floor(id/60)%60}:${id%60}`
-        const command = `exiftool \
--ExifIFD:SerialNumber="Pro2_Subcamera_${rig}" \
--ExifIFD:DateTimeOriginal="${fauxDate}" \
--ExifIFD:FocalLengthIn35mmFormat="59.4034" \
-${/*"-v3"*/ 0 || ""} \
-${rigDir}/${rig}/${`${id}`.padStart(4, "0")}.jpg`;
+        const command = exiftoolCommandGenerator(`${rigDir}/${rig}/${`${id}`.padStart(4, "0")}.jpg`, `Pro2_Subcamera_${rig}`, fauxDate)
         console.log(command);
         /*commandQueue.push(exec(
             command,
@@ -138,9 +129,3 @@ ${rigDir}/${rig}/${`${id}`.padStart(4, "0")}.jpg`;
 }
 
 await Promise.all(commandQueue);
-// // for await (const resp of exifUpdates) {
-// //     console.log(resp.status);
-// //     console.log(resp.output);
-// // }
-
-// console.log("All items updated...");
